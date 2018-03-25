@@ -6,14 +6,18 @@ import os
 import sys
 import tempfile
 from typing import BinaryIO, Generator
+import fnmatch
 
 import gnupg
 
 EXCLUDE_FILES = [
-    'default.nix'
+    'default.nix',
+    '.git/*',
+    '.pre-commit'
 ]
 
 gpg = gnupg.GPG()
+
 
 def get_umask():
     old_umask = os.umask(0)
@@ -75,11 +79,22 @@ def is_encrypted(file: BinaryIO) -> bool:
     return True
 
 
-def all_secrets(secrets_dir: str=os.getcwd()) -> Generator[str, None, None]:
+def all_secrets(secrets_dir: str = os.getcwd()) -> Generator[str, None, None]:
+    def excluded(path):
+        path = os.path.relpath(path, secrets_dir)
+        for pattern in EXCLUDE_FILES:
+            if fnmatch.fnmatch(path, pattern):
+                return True
+        return False
+
     for dir_path, dir_names, file_names in os.walk(secrets_dir):
+        for i, dir_name in enumerate(dir_names):
+            if excluded(os.path.join(dir_path, dir_name)):
+                del dir_names[i]
+
         for file_name in file_names:
             file_path = os.path.join(dir_path, file_name)
-            if os.path.relpath(file_path, secrets_dir) in EXCLUDE_FILES:
+            if excluded(file_path):
                 continue
             yield file_path
 
