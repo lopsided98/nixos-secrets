@@ -5,19 +5,15 @@ import getpass
 import os
 import sys
 import tempfile
-from typing import BinaryIO
+from typing import BinaryIO, Generator
 
 import gnupg
 
 EXCLUDE_FILES = [
-    'nixos-secrets.py',
     'default.nix'
 ]
 
 gpg = gnupg.GPG()
-
-secrets_dir: str = os.path.dirname(os.path.abspath(__file__))
-
 
 def get_umask():
     old_umask = os.umask(0)
@@ -79,7 +75,7 @@ def is_encrypted(file: BinaryIO) -> bool:
     return True
 
 
-def all_secrets():
+def all_secrets(secrets_dir: str=os.getcwd()) -> Generator[str, None, None]:
     for dir_path, dir_names, file_names in os.walk(secrets_dir):
         for file_name in file_names:
             file_path = os.path.join(dir_path, file_name)
@@ -158,7 +154,7 @@ def decrypt_command(args) -> None:
 
 def check_command(args) -> None:
     all_encrypted = True
-    for file_path in all_secrets():
+    for file_path in all_secrets(args.dir):
         with open(file_path, mode='rb') as file:
             if not is_encrypted(file):
                 print("\"{}\" is not encrypted".format(file_path))
@@ -195,6 +191,7 @@ def main() -> None:
     decrypt_parser.set_defaults(func=decrypt_command)
 
     check_parser = subparsers.add_parser('check', help="check that all secrets are encrypted")
+    check_parser.add_argument('dir', nargs='?', default=os.getcwd(), help='directory to scan')
     check_parser.set_defaults(func=check_command)
 
     args = parser.parse_args()
