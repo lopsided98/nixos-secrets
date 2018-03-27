@@ -15,10 +15,10 @@ let
     chmod 700 /boot/secrets
 
     encrypted_secrets=(
-      ${concatMapStringsSep "\n" (s: "'${s.value.source}'") (mapAttrsToList nameValuePair bootCfg)}
+      ${concatMapStringsSep "\n" (s: "'${s.value.source}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) bootCfg))}
     )
     secrets=(
-      ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair bootCfg)}
+      ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) bootCfg))}
     )
 
     for i in "''${!secrets[@]}"; do
@@ -162,7 +162,7 @@ in {
 
     system.activationScripts.secrets = stringAfter [ "etc" ] ''
       secrets=(
-        ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair cfg)}
+        ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) cfg))}
       )
       echo "decrypting secrets..."
 
