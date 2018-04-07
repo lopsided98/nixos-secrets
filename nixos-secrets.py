@@ -13,6 +13,7 @@ import gnupg
 EXCLUDE_FILES = [
     'default.nix',
     '.git/*',
+    '.git',
     '.pre-commit'
 ]
 
