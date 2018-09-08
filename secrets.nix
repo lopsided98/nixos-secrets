@@ -55,9 +55,8 @@ in {
             target = mkOption {
               type = types.str;
               description = ''
-                Name of secret file (relative to
-                <filename>/etc/secrets</filename>).  Defaults to the attribute
-                name.
+                Name of secret file (relative to <filename>/etc</filename>).
+                Defaults to "secrets/&lt;attribute name&gt;".
               '';
             };
 
@@ -108,7 +107,7 @@ in {
             };
           };
           config = {
-            target = mkDefault name;
+            target = mkDefault "secrets/${name}";
           };
         }));
       };
@@ -156,39 +155,44 @@ in {
     }) cfg;
 
     environment.etc = mapAttrs (n: v: {
-      inherit (v) enable source mode user group;
-      target = "secrets/${v.target}";
+      inherit (v) enable source mode user group target;
     }) cfg;
 
-    system.activationScripts.secrets = stringAfter [ "etc" ] ''
-      secrets=(
-        ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) cfg))}
-      )
-      echo "decrypting secrets..."
+    system.activationScripts.secrets = let
+      enabledSecrets = attrValues (filterAttrs (n: s: s.enable) cfg);
+    in stringAfter [ "etc" ] ''
+      decrypt_secrets() {
+        local -a secrets=(
+          ${concatMapStringsSep "\n" (s: "'${s.target}'") enabledSecrets}
+        )
+        echo "decrypting secrets..."
 
-      for secret in "''${secrets[@]}"; do
-        dec_temp=$(mktemp -p /etc/secrets "$secret.XXXXXXXX")
+        for secret in "''${secrets[@]}"; do
+          local dec_temp=$(mktemp -p /etc "$secret.XXXXXXXX")
 
-        # Add temporary decrypted secret to list of files to be cleaned up
-        echo "$dec_temp" >> /etc/.clean
+          # Add temporary decrypted secret to list of files to be cleaned up
+          echo "$(realpath --relative-to /etc "$dec_temp")" >> /etc/.clean
 
-        # Set umask so gpg does not create a world readable file
-        orig_umask=$(umask)
-        umask 0377
-        ${pkgs.gnupg}/bin/gpg -q --decrypt --batch --yes --passphrase-file '${config.environment.secretsKey}' -o "$dec_temp" "/etc/secrets/$secret"
-        umask $orig_umask
+          # Set umask so gpg does not create a world readable file
+          local orig_umask=$(umask)
+          umask 0377
+          ${pkgs.gnupg}/bin/gpg -q --decrypt --batch --yes --passphrase-file '${config.environment.secretsKey}' -o "$dec_temp" "/etc/$secret"
+          umask $orig_umask
 
-        # Copy permissions of encrypted secret to decrypted file
-        chown --reference="/etc/secrets/$secret" "$dec_temp"
-        chmod --reference="/etc/secrets/$secret" "$dec_temp"
+          # Copy permissions of encrypted secret to decrypted file
+          chown --reference="/etc/$secret" "$dec_temp"
+          chmod --reference="/etc/$secret" "$dec_temp"
 
-        # Move decrypted file over encrypted file
-        mv "$dec_temp" "/etc/secrets/$secret"
+          # Move decrypted file over encrypted file
+          mv "$dec_temp" "/etc/$secret"
 
-        # Remove temporary file from .clean
-        head -n -1 /etc/.clean > /etc/.clean.tmp
-        mv /etc/.clean.tmp /etc/.clean
-      done
+          # Remove temporary file from .clean
+          head -n -1 /etc/.clean > /etc/.clean.tmp
+          mv /etc/.clean.tmp /etc/.clean
+        done
+      }
+
+      decrypt_secrets
     '';
   }) (mkIf (bootCfg != {}) {
      system.extraSystemBuilderCmds = ''
