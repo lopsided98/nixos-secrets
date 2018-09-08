@@ -6,7 +6,9 @@ let
   cfg = config.environment.secrets;
   bootCfg = config.boot.secrets;
 
-  decryptBootSecrets = pkgs.writeScript "prepend-switch-to-configuration" ''
+  decryptBootSecrets = let
+    enabledSecrets = attrValues (filterAttrs (n: s: s.enable) bootCfg);
+  in pkgs.writeScript "prepend-switch-to-configuration" ''
     #!${pkgs.stdenv.shell}
     set -e
 
@@ -15,10 +17,10 @@ let
     chmod 700 /boot/secrets
 
     encrypted_secrets=(
-      ${concatMapStringsSep "\n" (s: "'${s.value.source}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) bootCfg))}
+      ${concatMapStringsSep "\n" (s: "'${s.source}'") enabledSecrets}
     )
     secrets=(
-      ${concatMapStringsSep "\n" (s: "'${s.value.target}'") (mapAttrsToList nameValuePair (filterAttrs (n: s: s.enable) bootCfg))}
+      ${concatMapStringsSep "\n" (s: "'${s.target}'") enabledSecrets}
     )
 
     for i in "''${!secrets[@]}"; do
@@ -158,12 +160,10 @@ in {
       inherit (v) enable source mode user group target;
     }) cfg;
 
-    system.activationScripts.secrets = let
-      enabledSecrets = attrValues (filterAttrs (n: s: s.enable) cfg);
-    in stringAfter [ "etc" ] ''
+    system.activationScripts.secrets = stringAfter [ "etc" ] ''
       decrypt_secrets() {
         local -a secrets=(
-          ${concatMapStringsSep "\n" (s: "'${s.target}'") enabledSecrets}
+          ${concatMapStringsSep "\n" (s: "'${s.target}'") (attrValues (filterAttrs (n: s: s.enable) cfg))}
         )
         echo "decrypting secrets..."
 
