@@ -66,7 +66,7 @@ in {
               type = types.path;
               description = "Path of the source file.";
             };
-            
+
             mode = mkOption {
               type = types.str;
               default = "0400";
