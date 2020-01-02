@@ -6,11 +6,32 @@ let
   cfg = config.environment.secrets;
   bootCfg = config.boot.secrets;
 
+  secretsLib = pkgs.writeText "nixos-secrets-lib.sh" ''
+    # Create temporary gpg homedir
+    secrets_gpg_home=$(mktemp -d --tmpdir "nixos-secrets.XXXXXXXX")
+    secrets_gpg() {
+      '${pkgs.gnupg}/bin/gpg' -q --batch --yes --homedir "$secrets_gpg_home" "$@"
+    }
+
+    secrets_cleanup() {
+      '${pkgs.gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
+
+      rm -r "$secrets_gpg_home"
+      unset secrets_gpg_home
+      unset -f secrets_gpg
+      unset -f secrets_cleanup
+    }
+
+    secrets_gpg --import '${config.environment.secretsKey}'
+  '';
+
   decryptBootSecrets = let
     enabledSecrets = attrValues (filterAttrs (n: s: s.enable) bootCfg);
-  in pkgs.writeScript "prepend-switch-to-configuration" ''
-    #!${pkgs.stdenv.shell}
+  in pkgs.writers.writeBash "nixos-decrypt-boot-secrets.sh" ''
     set -e
+    echo "decrypting boot secrets..."
+
+    source '${secretsLib}'
 
     mkdir -p /boot/secrets
     chown 0:0 /boot/secrets
@@ -27,8 +48,10 @@ let
       encrypted_secret="''${encrypted_secrets[i]}"
       secret="/boot/secrets/''${secrets[i]}"
       mkdir -p "$(dirname "$secret")"
-      ${pkgs.gnupg}/bin/gpg -q --decrypt --batch --yes --passphrase-file '${config.environment.secretsKey}' -o "$secret" "$encrypted_secret"
+      secrets_gpg --decrypt -o "$secret" "$encrypted_secret"
     done
+
+    secrets_cleanup
   '';
 in {
 
@@ -36,9 +59,9 @@ in {
 
     environment = {
       secretsKey = mkOption {
-        default = "/etc/secrets/key";
+        default = "/etc/secrets/key.asc";
         type = types.str;
-        description = "Key used to decrypt secret files";
+        description = "Private key used to decrypt secret files.";
       };
 
       secrets = mkOption {
@@ -49,9 +72,7 @@ in {
             enable = mkOption {
               type = types.bool;
               default = true;
-              description = ''
-                Whether this secret should be decrypted.
-              '';
+              description = "Whether this secret should be decrypted.";
             };
 
             target = mkOption {
@@ -71,41 +92,31 @@ in {
               type = types.str;
               default = "0400";
               example = "0600";
-              description = ''
-                The mode of the copied secret file.
-              '';
+              description = "The mode of the copied secret file.";
             };
 
             uid = mkOption {
               default = 0;
               type = types.int;
-              description = ''
-                UID of decrypted secret file.
-              '';
+              description = "UID of decrypted secret file.";
             };
 
             gid = mkOption {
               default = 0;
               type = types.int;
-              description = ''
-                GID of decrypted secret file.
-              '';
+              description = "GID of decrypted secret file.";
             };
 
             user = mkOption {
               default = "+${toString config.uid}";
               type = types.str;
-              description = ''
-                User name of decrypted secret file.
-              '';
+              description = "User name of decrypted secret file.";
             };
 
             group = mkOption {
               default = "+${toString config.gid}";
               type = types.str;
-              description = ''
-                Group name of decrypted secret file.
-              '';
+              description = "Group name of decrypted secret file.";
             };
           };
           config = {
@@ -123,9 +134,7 @@ in {
           enable = mkOption {
             type = types.bool;
             default = true;
-            description = ''
-              Whether this secret should be decrypted.
-            '';
+            description = "Whether this secret should be decrypted.";
           };
 
           target = mkOption {
@@ -162,10 +171,12 @@ in {
 
     system.activationScripts.secrets = stringAfter [ "etc" ] ''
       decrypt_secrets() {
+        echo "decrypting secrets..."
+        
+        source '${secretsLib}'
         local -a secrets=(
           ${concatMapStringsSep "\n" (s: "'${s.target}'") (attrValues (filterAttrs (n: s: s.enable) cfg))}
         )
-        echo "decrypting secrets..."
 
         for secret in "''${secrets[@]}"; do
           local dec_temp=$(mktemp -p /etc "$secret.XXXXXXXX")
@@ -176,7 +187,7 @@ in {
           # Set umask so gpg does not create a world readable file
           local orig_umask=$(umask)
           umask 0377
-          ${pkgs.gnupg}/bin/gpg -q --decrypt --batch --yes --passphrase-file '${config.environment.secretsKey}' -o "$dec_temp" "/etc/$secret"
+          secrets_gpg --decrypt -o "$dec_temp" "/etc/$secret"
           umask $orig_umask
 
           # Copy permissions of encrypted secret to decrypted file
@@ -190,6 +201,8 @@ in {
           head -n -1 /etc/.clean > /etc/.clean.tmp
           mv /etc/.clean.tmp /etc/.clean
         done
+
+        secrets_cleanup
       }
 
       decrypt_secrets
