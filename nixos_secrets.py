@@ -293,7 +293,7 @@ class SecretsConfig:
             key_aliases: List[str] = data.pop('keys', []) + ['master']
             keys = set.union(*map(self.key_manager.lookup_alias, key_aliases))
             if path and keys:
-                secret = Secret(path, keys)
+                secret = Secret(os.path.join(self.dir, path), keys)
                 self._secrets.append(secret)
                 self._path_secrets[path] = secret
 
@@ -307,6 +307,7 @@ class SecretsConfig:
                 parse_queue.appendleft(child_data)
 
     def lookup_path(self, path: str) -> Secret:
+        path = os.path.relpath(path, self.dir)
         try:
             return self._path_secrets[path]
         except KeyError as e:
@@ -338,7 +339,6 @@ class SecretsConfig:
 
 def encrypt_command(config: SecretsConfig, args: argparse.Namespace) -> int:
     def encrypt_path(path: str):
-        path = os.path.relpath(path, config.dir)
         secret = config.lookup_path(path)
         secret.update_keys()
 
