@@ -24,5 +24,6 @@
       overlay = final: prev: {
         nixos-secrets = final.python3Packages.callPackage ./. { };
       };
+      nixosModule = import ./secrets.nix;
     };
 }
