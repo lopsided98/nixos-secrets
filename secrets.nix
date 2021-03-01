@@ -9,7 +9,7 @@ let
 
   secretsLib = pkgs.writeText "nixos-secrets-lib.sh" ''
     # Create temporary gpg homedir
-    secrets_gpg_home=$(mktemp -d --tmpdir "nixos-secrets.XXXXXXXX")
+    secrets_gpg_home="$('${pkgs.coreutils}/bin/mktemp' -d --tmpdir nixos-secrets.XXXXXXXX)"
     secrets_gpg() {
       '${pkgs.gnupg}/bin/gpg' -q --batch --yes --ignore-time-conflict --homedir "$secrets_gpg_home" "$@"
     }
