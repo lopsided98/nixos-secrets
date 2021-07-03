@@ -197,17 +197,6 @@ in {
               };
             }));
           };
-
-          directory = mkOption {
-            type = types.path;
-            readOnly = true;
-            description = ''
-              Directory where secrets are stored.
-            '';
-          };
-        };
-        config = {
-          directory = "/run/" + config.systemd.services."${name}-secrets".serviceConfig.RuntimeDirectory;
         };
       }));
     };
