@@ -296,7 +296,7 @@ in {
     (mkIf (systemdCfg != {}) {
       assertions = mapAttrsToList (n: { units, ... }: {
         assertion = all (unit: hasAttr unit config.systemd.units) units;
-        message = "Invalid systemd unit, one of: ${concatStringsSep ", " units}";
+        message = "Systemd unit not found, one of: ${concatStringsSep ", " units}";
       }) systemdCfg;
 
       systemd.services = mapAttrs' (name: config: let
