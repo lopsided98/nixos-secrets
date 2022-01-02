@@ -1,4 +1,4 @@
-{ lib, nixShell ? false, buildPythonApplication, mypy, python-gnupg }:
+{ lib, nixShell ? false, buildPythonApplication, mypy, python-gnupg, gnupg }:
 
 buildPythonApplication {
   name = "nixos-secrets";
@@ -16,7 +16,24 @@ buildPythonApplication {
   };
 
   nativeBuildInputs = [ mypy ];
-  propagatedBuildInputs = [ python-gnupg ];
+  propagatedBuildInputs = [
+    (python-gnupg.override {
+      gnupg = gnupg.override {
+        enableMinimal = true;
+        guiSupport = false;
+        pcsclite = null;
+        sqlite = null;
+        pinentry = null;
+        adns = null;
+        gnutls = null;
+        libusb1 = null;
+        openldap = null;
+        readline = null;
+        zlib = null;
+        bzip2 = null;
+      };
+    })
+  ];
 
   meta = with lib; {
     description = "Encrypted secrets management for NixOS";
