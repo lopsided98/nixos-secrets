@@ -7,15 +7,31 @@ let
   systemdCfg = config.systemd.secrets;
   bootCfg = config.boot.secrets;
 
+  # Minimal GnuPG
+  gnupg = pkgs.gnupg.override {
+    enableMinimal = true;
+    guiSupport = false;
+    pcsclite = null;
+    sqlite = null;
+    pinentry = null;
+    adns = null;
+    gnutls = null;
+    libusb1 = null;
+    openldap = null;
+    readline = null;
+    zlib = null;
+    bzip2 = null;
+  };
+
   secretsLib = pkgs.writeText "nixos-secrets-lib.sh" ''
     # Create temporary gpg homedir
     secrets_gpg_home="$('${pkgs.coreutils}/bin/mktemp' -d --tmpdir nixos-secrets.XXXXXXXX)"
     secrets_gpg() {
-      '${pkgs.gnupg}/bin/gpg' -q --batch --yes --ignore-time-conflict --homedir "$secrets_gpg_home" "$@"
+      '${gnupg}/bin/gpg' -q --batch --yes --ignore-time-conflict --homedir "$secrets_gpg_home" "$@"
     }
 
     secrets_cleanup() {
-      '${pkgs.gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
+      '${gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
 
       rm -r "$secrets_gpg_home"
       unset secrets_gpg_home
