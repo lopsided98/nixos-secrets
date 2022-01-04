@@ -9,7 +9,6 @@ let
 
   # Minimal GnuPG
   gnupg = pkgs.gnupg.override {
-    enableMinimal = true;
     guiSupport = false;
     pcsclite = null;
     sqlite = null;
