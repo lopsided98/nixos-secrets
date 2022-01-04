@@ -18,8 +18,6 @@ let
     libusb1 = null;
     openldap = null;
     readline = null;
-    zlib = null;
-    bzip2 = null;
   };
 
   secretsLib = pkgs.writeText "nixos-secrets-lib.sh" ''
