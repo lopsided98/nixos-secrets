@@ -66,6 +66,8 @@ class SecretError(Exception):
 class ListPackets:
     """Handle status messages for --list-packets."""
 
+    returncode: Optional[int] = None
+
     def __init__(self, gpg: gnupg.GPG):
         self._gpg = gpg
         #: True if the passphrase to a public/private keypair is required.
