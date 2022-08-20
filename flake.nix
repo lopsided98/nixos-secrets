@@ -8,22 +8,22 @@
     eachSystem allSystems (system: let
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ self.overlay ];
+        overlays = [ self.overlays.default ];
       };
     in {
-      defaultPackage = pkgs.nixos-secrets;
+      packages.default = pkgs.nixos-secrets;
 
-      defaultApp = {
+      apps.default = {
         type = "app";
-        program = "${self.defaultPackage.${system}}/bin/nixos-secrets";
+        program = "${self.packages.${system}.default}/bin/nixos-secrets";
       };
 
       devShell = import ./shell.nix { inherit pkgs; };
     }) //
     {
-      overlay = final: prev: {
+      overlays.default = final: prev: {
         nixos-secrets = final.python3Packages.callPackage ./. { };
       };
-      nixosModule = import ./secrets.nix;
+      nixosModules.default = import ./secrets.nix;
     };
 }
