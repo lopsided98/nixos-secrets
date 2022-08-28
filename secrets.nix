@@ -11,11 +11,11 @@ let
     # Create temporary gpg homedir
     secrets_gpg_home="$('${pkgs.coreutils}/bin/mktemp' -d --tmpdir nixos-secrets.XXXXXXXX)"
     secrets_gpg() {
-      '${gnupg}/bin/gpg' -q --batch --yes --ignore-time-conflict --homedir "$secrets_gpg_home" "$@"
+      '${pkgs.gnupg}/bin/gpg' -q --batch --yes --ignore-time-conflict --homedir "$secrets_gpg_home" "$@"
     }
 
     secrets_cleanup() {
-      '${gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
+      '${pkgs.gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
 
       rm -r "$secrets_gpg_home"
       unset secrets_gpg_home
