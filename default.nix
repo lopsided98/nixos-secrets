@@ -1,4 +1,5 @@
-{ lib, nixShell ? false, buildPythonApplication, mypy, python-gnupg }:
+{ lib, nixShell ? false, buildPythonApplication, mypy, black, flake8, rope
+, python-gnupg }:
 
 buildPythonApplication {
   name = "nixos-secrets";
@@ -15,7 +16,13 @@ buildPythonApplication {
     src = lib.cleanSource ./.;
   };
 
-  nativeBuildInputs = [ mypy ];
+  nativeBuildInputs = [
+    mypy
+  ] ++ lib.optionals nixShell [
+    black
+    flake8
+    rope
+  ];
   propagatedBuildInputs = [ python-gnupg ];
 
   meta = with lib; {

@@ -10,7 +10,20 @@ import subprocess
 import sys
 import tempfile
 from operator import itemgetter
-from typing import Generator, Dict, Set, Any, List, Deque, Optional, Iterable, Union, BinaryIO
+from typing import (
+    Generator,
+    Dict,
+    Set,
+    Any,
+    List,
+    Deque,
+    Optional,
+    Iterable,
+    Union,
+    BinaryIO,
+    Final,
+    cast,
+)
 
 import gnupg  # type: ignore
 
@@ -19,12 +32,7 @@ logging.basicConfig()
 logger = logging.getLogger("nixos_secrets")
 logger.setLevel(logging.DEBUG)
 
-EXCLUDE_FILES = [
-    '*.nix',
-    '.git/*',
-    '.git',
-    '.pre-commit'
-]
+EXCLUDE_FILES = ["*.nix", ".git/*", ".git", ".pre-commit"]
 
 gpg = gnupg.GPG()
 
@@ -36,8 +44,14 @@ def get_umask() -> int:
 
 
 def parse_nix(file_path: str) -> Dict[str, Any]:
-    return json.loads(subprocess.check_output(
-        ["nix-instantiate", "--json", "--strict", "--eval", file_path]))
+    return cast(
+        Dict[str, Any],
+        json.loads(
+            subprocess.check_output(
+                ["nix-instantiate", "--json", "--strict", "--eval", file_path]
+            )
+        ),
+    )
 
 
 def wrap_string_list(iter_or_str: Union[str, Iterable[str]]) -> Iterable[str]:
@@ -48,7 +62,7 @@ def wrap_string_list(iter_or_str: Union[str, Iterable[str]]) -> Iterable[str]:
     :return: an iterable of strings
     """
     if isinstance(iter_or_str, str):
-        return iter_or_str,
+        return (iter_or_str,)
     else:
         return iter_or_str
 
@@ -83,24 +97,24 @@ class ListPackets:
         self.data: Optional[bytes] = None
         self.stderr: Optional[str] = None
 
-    def handle_status(self, key: str, value: str):
+    def handle_status(self, key: str, value: str) -> None:
         """Parse a status code from the attached GnuPG process."""
 
-        if key == 'ENC_TO':
+        if key == "ENC_TO":
             key, _, _ = value.split()
             self.encrypted_to.append(key)
-        elif key in ('NEED_PASSPHRASE', 'MISSING_PASSPHRASE'):
+        elif key in ("NEED_PASSPHRASE", "MISSING_PASSPHRASE"):
             self.need_passphrase = True
-        elif key == 'NEED_PASSPHRASE_SYM':
+        elif key == "NEED_PASSPHRASE_SYM":
             self.need_passphrase_sym = True
-        elif key == 'USERID_HINT':
+        elif key == "USERID_HINT":
             self.userid_hint = value.strip().split()
         else:
-            gnupg.logger.debug('message ignored: %s, %s', key, value)
+            gnupg.logger.debug("message ignored: %s, %s", key, value)
 
 
 class Secret:
-    _logger = logger.getChild('secret')
+    _logger: Final = logger.getChild("secret")
 
     def __init__(self, path: str, keys: Set[str]):
         self._path = path
@@ -113,7 +127,7 @@ class Secret:
         Checks the first packet type and encryption algorithm.
         :return: True if the file seems to be an encrypted secret
         """
-        with open(self._path, mode='rb') as file:
+        with open(self._path, mode="rb") as file:
             header = file.read(32)
 
             try:
@@ -158,9 +172,9 @@ class Secret:
 
     def _list_packets(self) -> ListPackets:
         """List the packet contents of this secret."""
-        args = ['--list-packets', '--pinentry-mode', 'cancel']
+        args = ["--list-packets", "--pinentry-mode", "cancel"]
         result = ListPackets(gpg)
-        with open(self._path, 'rb') as file:
+        with open(self._path, "rb") as file:
             gpg._handle_io(args, file, result, binary=True)
         return result
 
@@ -174,7 +188,7 @@ class Secret:
         :return: set of unique key fingerprints
         """
         key_list: gnupg.ListKeys = gpg.list_keys(keys=keys)
-        return set(map(itemgetter('fingerprint'), key_list))
+        return set(map(itemgetter("fingerprint"), key_list))
 
     @property
     def encrypted(self) -> bool:
@@ -183,13 +197,15 @@ class Secret:
         self._encrypted = self._detect_encryption()
         return self._encrypted
 
-    def update_keys(self):
+    def update_keys(self) -> None:
         current_keys = set()
         if self.encrypted:
             packets = self._list_packets()
             current_keys = self._get_master_keys(packets.encrypted_to)
         if current_keys != self._keys:
-            self._logger.debug(f"Adding keys: {self._keys - current_keys}, removing keys: {current_keys - self._keys}")
+            self._logger.debug(
+                f"Adding keys: {self._keys - current_keys}, removing keys: {current_keys - self._keys}"
+            )
             if self.encrypted:
                 self.decrypt()
             self.encrypt()
@@ -202,11 +218,16 @@ class Secret:
             return
 
         file_dir, file_name = os.path.split(self._path)
-        with open(self._path, 'rb') as file, \
-                tempfile.NamedTemporaryFile(dir=file_dir, prefix=file_name,
-                                            delete=False) as enc_temp:  # type: BinaryIO, Any
-            result: gnupg.Crypt = gpg.encrypt_file(file, output=enc_temp.name, recipients=self._keys,
-                                                   armor=False, always_trust=True)
+        with open(self._path, "rb") as file, tempfile.NamedTemporaryFile(
+            dir=file_dir, prefix=file_name, delete=False
+        ) as enc_temp:  # type: BinaryIO, Any
+            result: gnupg.Crypt = gpg.encrypt_file(
+                file,
+                output=enc_temp.name,
+                recipients=self._keys,
+                armor=False,
+                always_trust=True,
+            )
             if result.ok:
                 os.fchmod(enc_temp.file.fileno(), 0o666 & ~get_umask())
         if result.ok:
@@ -218,9 +239,9 @@ class Secret:
 
     def decrypt(self) -> None:
         file_dir, file_name = os.path.split(self._path)
-        with open(self._path, 'rb') as file, \
-                tempfile.NamedTemporaryFile(dir=file_dir, prefix=file_name,
-                                            delete=False) as dec_temp:  # type: BinaryIO, Any
+        with open(self._path, "rb") as file, tempfile.NamedTemporaryFile(
+            dir=file_dir, prefix=file_name, delete=False
+        ) as dec_temp:  # type: BinaryIO, Any
             result = gpg.decrypt_file(file, output=dec_temp.name)
             if result.ok:
                 os.fchmod(dec_temp.file.fileno(), 0o666 & ~get_umask())
@@ -234,42 +255,48 @@ class Secret:
 
 class KeyGenerator:
     def __init__(self, config: Dict[str, Any]):
-        self._key_type: Optional[str] = config.get('keyType', 'RSA')
-        self._key_length: Optional[int] = config.get('keyLength', 4096)
-        self._domain: str = config['domain']
+        self._key_type: Optional[str] = config.get("keyType", "RSA")
+        self._key_length: Optional[int] = config.get("keyLength", 4096)
+        self._domain: str = config["domain"]
 
     def generate(self, name: str, key_path: Optional[str] = None) -> gnupg.GenKey:
         if not key_path:
-            key_path = f'{name}.asc'
+            key_path = f"{name}.asc"
 
         key_input = "%no-protection\n" + gpg.gen_key_input(
             key_type=self._key_type,
             key_length=self._key_length,
             name_real=name,
-            name_email=f'{name.lower()}@{self._domain}',
-            passphrase='',
-            expire_date=0)
+            name_email=f"{name.lower()}@{self._domain}",
+            passphrase="",
+            expire_date=0,
+        )
         key: gnupg.GenKey = gpg.gen_key(key_input)
         if not key:
             raise SecretKeyError(f"Failed to generate key: {key}")
-        with open(key_path, 'w') as key_file:
-            key_data = gpg.export_keys(key.fingerprint, secret=True, passphrase='')
+        with open(key_path, "w") as key_file:
+            key_data = gpg.export_keys(key.fingerprint, secret=True, passphrase="")
             key_file.write(key_data)
-        gpg.delete_keys(key.fingerprint, secret=True, passphrase='')
+        gpg.delete_keys(key.fingerprint, secret=True, passphrase="")
         return key
 
 
 class KeyManager:
     def __init__(self, config: Dict[str, Union[str, Iterable[str]]]):
-        self._aliases: Dict[str, Set[str]] = {alias: set(wrap_string_list(key_config))
-                                              for (alias, key_config) in config.items()}
-        self._aliases['all'] = set.union(*self._aliases.values())
+        self._aliases: Dict[str, Set[str]] = {
+            alias: set(wrap_string_list(key_config))
+            for (alias, key_config) in config.items()
+        }
+        self._aliases["all"] = set.union(*self._aliases.values())
 
     def lookup_alias(self, alias: str) -> Set[str]:
         try:
             return self._aliases[alias]
         except KeyError as e:
             raise SecretKeyError(f"unknown key alias: {alias}") from e
+
+
+SecretDict = Dict[str, Union[str, List[str], "SecretDict"]]
 
 
 class SecretsConfig:
@@ -283,16 +310,16 @@ class SecretsConfig:
 
         config_data = parse_nix(self._path)
 
-        self.key_generator = KeyGenerator(config_data.get('generate', {}))
-        self.key_manager = KeyManager(config_data.get('keys', {}))
+        self.key_generator = KeyGenerator(config_data.get("generate", {}))
+        self.key_manager = KeyManager(config_data.get("keys", {}))
 
         self._secrets: List[Secret] = []
         self._path_secrets: Dict[str, Secret] = {}
-        parse_queue: Deque[Dict[str, Any]] = collections.deque((config_data['secrets'],))
+        parse_queue: Deque[SecretDict] = collections.deque((config_data["secrets"],))
         while parse_queue:
             data = parse_queue.pop()
-            path: Optional[str] = data.pop('path', None)
-            key_aliases: List[str] = data.pop('keys', []) + ['master']
+            path: Optional[str] = cast(Optional[str], data.pop("path", None))
+            key_aliases = cast(List[str], data.pop("keys", [])) + ["master"]
             keys = set.union(*map(self.key_manager.lookup_alias, key_aliases))
             if path and keys:
                 secret = Secret(os.path.join(self.dir, path), keys)
@@ -302,10 +329,10 @@ class SecretsConfig:
             # All other attributes are child secrets
             for _, cd in data.items():
                 if isinstance(cd, str):
-                    child_data: Dict = {'path': cd}
+                    child_data: SecretDict = {"path": cd}
                 else:
-                    child_data = cd
-                child_data.setdefault('keys', []).extend(key_aliases)
+                    child_data = cast(SecretDict, cd)
+                cast(List[str], child_data.setdefault("keys", [])).extend(key_aliases)
                 parse_queue.appendleft(child_data)
 
     def lookup_path(self, path: str) -> Secret:
@@ -315,7 +342,7 @@ class SecretsConfig:
         except KeyError as e:
             raise SecretError(path, "secret path is not configured") from e
 
-    def is_excluded(self, path: str):
+    def is_excluded(self, path: str) -> bool:
         path = os.path.relpath(path, self.dir)
         for pattern in EXCLUDE_FILES:
             if fnmatch.fnmatch(path, pattern):
@@ -340,7 +367,7 @@ class SecretsConfig:
 
 
 def encrypt_command(config: SecretsConfig, args: argparse.Namespace) -> int:
-    def encrypt_path(path: str):
+    def encrypt_path(path: str) -> None:
         secret = config.lookup_path(path)
         secret.update_keys()
 
@@ -364,14 +391,14 @@ def decrypt_command(config: SecretsConfig, args: argparse.Namespace) -> int:
     return 0
 
 
-def check_command(config, args: argparse.Namespace) -> int:
+def check_command(config: SecretsConfig, args: argparse.Namespace) -> int:
     # Check all files, even if they are not in the config file
     # This prevents committing unencrypted files
     all_encrypted = True
     for path in config.all_secrets():
         secret = Secret(path, set())
         if not secret.encrypted:
-            print("\"{}\" is not encrypted".format(path))
+            print('"{}" is not encrypted'.format(path))
             all_encrypted = False
     if all_encrypted:
         print("All secrets are encrypted")
@@ -398,46 +425,64 @@ def check_fd(value: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Manage NixOS secret files")
-    parser.add_argument('-c', '--config', default=os.getcwd(), help="Nix configuration file for secrets")
+    parser.add_argument(
+        "-c", "--config", default=os.getcwd(), help="Nix configuration file for secrets"
+    )
     subparsers = parser.add_subparsers()
 
-    encrypt_parser = subparsers.add_parser('encrypt', help="encrypt secrets or update keys", description='''
+    encrypt_parser = subparsers.add_parser(
+        "encrypt",
+        help="encrypt secrets or update keys",
+        description="""
         Encrypt the specified files using the keys specified in the config
         file. If keys need to be added or removed, the master private key
         will be required.
-    ''')
-    encrypt_parser.add_argument('files', nargs='+', help="files to encrypt")
-    encrypt_parser.add_argument('-r', '--recursive', action='store_true',
-                                help='recursively encrypt specified directories')
+    """,
+    )
+    encrypt_parser.add_argument("files", nargs="+", help="files to encrypt")
+    encrypt_parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="recursively encrypt specified directories",
+    )
     encrypt_parser.set_defaults(func=encrypt_command)
 
-    decrypt_parser = subparsers.add_parser('decrypt', help="decrypt secrets")
-    decrypt_parser.add_argument('files', nargs='+', help='files to decrypt')
+    decrypt_parser = subparsers.add_parser("decrypt", help="decrypt secrets")
+    decrypt_parser.add_argument("files", nargs="+", help="files to decrypt")
     decrypt_parser.set_defaults(func=decrypt_command)
 
-    generate_parser = subparsers.add_parser('generate', help="generate PGP key", description='''
+    generate_parser = subparsers.add_parser(
+        "generate",
+        help="generate PGP key",
+        description="""
         Generate a PGP key designed to be used to encrypt NixOS secrets. This
         command will generate a key with no passphrase. The private key will be
         exported to a file specified by the --key-file option, and the public
         key will remain in the keyring.
-    ''')
-    generate_parser.add_argument('name', help='name of the key')
-    generate_parser.add_argument('--key-file', help='file name for exported secret key')
+    """,
+    )
+    generate_parser.add_argument("name", help="name of the key")
+    generate_parser.add_argument("--key-file", help="file name for exported secret key")
     generate_parser.set_defaults(func=generate_command)
 
-    check_parser = subparsers.add_parser('check', help="check that all secrets are encrypted")
-    check_parser.add_argument('dir', nargs='?', default=os.getcwd(), help='directory to scan')
+    check_parser = subparsers.add_parser(
+        "check", help="check that all secrets are encrypted"
+    )
+    check_parser.add_argument(
+        "dir", nargs="?", default=os.getcwd(), help="directory to scan"
+    )
     check_parser.set_defaults(func=check_command)
 
     args = parser.parse_args()
 
-    if 'func' in args:
+    if "func" in args:
         config = SecretsConfig(args.config)
-        return args.func(config, args)
+        return cast(int, args.func(config, args))
     else:
         parser.print_usage()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
