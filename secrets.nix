@@ -343,9 +343,14 @@ in {
     })
 
     (mkIf (bootCfg != {}) {
-      system.extraSystemBuilderCmds = ''
-        # Hook the boot secrets script into the switch-to-configuration script
-        sed -i '/# Install or update the bootloader./ i system("${decryptBootSecrets}") == 0 or exit 1;' "$out/bin/switch-to-configuration"
+      # Use a subshell so we can source makeWrapper's setup hook without
+      # affecting the rest of activatableSystemBuilderCommands.
+      system.activatableSystemBuilderCommands = lib.mkAfter ''
+        (
+          source ${pkgs.buildPackages.makeWrapper}/nix-support/setup-hook
+          wrapProgram $out/bin/switch-to-configuration \
+            --run "${decryptBootSecrets}"
+        )
       '';
 
       system.activationScripts.cleanBootSecrets = ''
