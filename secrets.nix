@@ -17,7 +17,7 @@ let
     secrets_cleanup() {
       '${pkgs.gnupg}/bin/gpgconf' --homedir "$secrets_gpg_home" --kill gpg-agent
 
-      rm -r "$secrets_gpg_home"
+      rm -rf "$secrets_gpg_home"
       unset secrets_gpg_home
       unset -f secrets_gpg
       unset -f secrets_cleanup
