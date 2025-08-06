@@ -1,8 +1,12 @@
-{ lib, nixShell ? false, buildPythonApplication, mypy, black, flake8, rope
-, python-gnupg }:
+{ lib, nixShell ? false, buildPythonApplication, setuptools, mypy, black,
+  flake8, rope, python-gnupg }:
 
 buildPythonApplication {
-  name = "nixos-secrets";
+  pname = "nixos-secrets";
+  version = "0.2";
+
+  pyproject = true;
+  build-system = [ setuptools ];
 
   # lib.inNixShell can't be used here because it will return a false positive
   # if this package is pulled into a shell
