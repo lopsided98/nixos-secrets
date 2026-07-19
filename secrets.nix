@@ -54,6 +54,8 @@ let
 
     secrets_cleanup
   '';
+
+  secretRuntimeDirectory = name: "secrets/${name}";
 in {
 
   options = {
@@ -206,7 +208,7 @@ in {
             '';
           };
         };
-        config.directory = "/run/" + config.systemd.services."${name}-secrets".serviceConfig.RuntimeDirectory;
+        config.directory = "/run/" + (secretRuntimeDirectory name);
       }));
     };
 
@@ -299,13 +301,11 @@ in {
         message = "Systemd unit not found, one of: ${concatStringsSep ", " units}";
       }) systemdCfg;
 
-      systemd.services = mapAttrs' (name: config: let
-        runtimeDirectory = "secrets/${name}";
-      in nameValuePair "${name}-secrets" {
+      systemd.services = mapAttrs' (name: config: nameValuePair "${name}-secrets" {
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
-          RuntimeDirectory = runtimeDirectory;
+          RuntimeDirectory = secretRuntimeDirectory name;
           PrivateTmp = true;
         };
         before = config.units;
@@ -316,7 +316,7 @@ in {
 
           decrypt_secret() {
             secret_source="$1"
-            secret_target=/run/${escapeShellArg runtimeDirectory}/"$2"
+            secret_target=/run/${escapeShellArg (secretRuntimeDirectory name)}/"$2"
             secret_mode="$3"
             secret_user="$4"
             secret_group="$5"
